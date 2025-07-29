@@ -234,7 +234,7 @@ Each category must be a plist with fields :name (string, category name),
 
 (defun hq-save-data ()
   "Save the quest system data."
-  (with-temp-file "~/.emacs.d/habit-quest-data.el"
+  (with-temp-file (concat user-emacs-directory "habit-quest-data.el")
     (prin1 (list hq-xp
                  hq-level
                  hq-gold
@@ -246,9 +246,9 @@ Each category must be a plist with fields :name (string, category name),
 
 (defun hq-load-data ()
   "Load the quest system data."
-  (when (file-exists-p "~/.emacs.d/habit-quest-data.el")
+  (when (file-exists-p (concat user-emacs-directory "habit-quest-data.el"))
     (with-temp-buffer
-      (insert-file-contents "~/.emacs.d/habit-quest-data.el")
+      (insert-file-contents (concat user-emacs-directory "habit-quest-data.el"))
       (goto-char (point-min))
       (let ((data (read (current-buffer))))
         (setq hq-xp (nth 0 data)
