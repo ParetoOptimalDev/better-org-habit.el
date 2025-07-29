@@ -598,6 +598,8 @@ Each category must be a plist with fields :name (string, category name),
   (with-current-buffer "*Org Agenda*"
     (save-excursion
       (goto-char (point-min))
+        (unless (get-text-property (point) 'org-habit-p)
+	  (org-agenda-next-item 1))
       (while (not (eobp))
         (when (get-text-property (point) 'org-habit-p)
           (let* ((marker (get-text-property (point) 'org-hd-marker))
@@ -621,7 +623,9 @@ Each category must be a plist with fields :name (string, category name),
                     (puthash habit-name
                              (cons habit-streak (or habits-state ""))
                              habit-stats))))))
-          (forward-line 1)))))
+          (if (save-excursion (progn (forward-line 1) (eobp)))
+	      (forward-line 1)
+	    (org-agenda-next-item 1))))))
   (dolist (quest hq-quests)
     (unless (plist-get quest :completed)
       (let* ((habits (plist-get quest :habits))
