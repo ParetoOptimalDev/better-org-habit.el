@@ -579,7 +579,7 @@ Each category must be a plist with fields :name (string, category name),
             (day-index 0)
             (continue t))
         (while (and continue
-                    (< day-index (length (car streaks-data))))
+                    (< day-index (length streaks-data)))
           (let ((all-done t))
             (dolist (habit-state streaks-data)
               (when (and (< day-index (length habit-state))
