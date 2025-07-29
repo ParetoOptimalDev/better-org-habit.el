@@ -782,7 +782,7 @@ Each category must be a plist with fields :name (string, category name),
               (with-current-buffer (marker-buffer marker)
                 (save-excursion
                   (goto-char (marker-position marker))
-                  (setq habit-name (org-get-heading t t t t))))
+                  (setq habit-name (org-no-properties (org-get-heading t t t t)))))
               (save-excursion
                 (end-of-line)
                 (when (re-search-backward "\\[🔥 \\([0-9]+\\)\\]" (line-beginning-position) t)
