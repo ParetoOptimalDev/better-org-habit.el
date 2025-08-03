@@ -631,9 +631,6 @@ Each category must be a plist with fields :name (string, category name),
 
 (defun hq-calculate-combined-streak (habits habit-stats required-days)
   "Calculate the number of consecutive days all habits were completed."
-  ;; need to use the habit function to get habit-data with marker
-  ;; then pass to my calculate streak as written
-
   (let ((streaks '()))
     (dolist (habit habits)
       (let ((habit-data (gethash habit habit-stats)))
@@ -648,40 +645,12 @@ Each category must be a plist with fields :name (string, category name),
 	      (push (my/calculate-streak max-repeat-len habit-finishes) streaks)
 	  0)))) (car (sort streaks))))
 
-
-  ;; (let ((streaks-data nil))
-  ;;   (dolist (habit habits)
-  ;;     ;; TODO don't hardcode habit
-  ;;     (when-let ((habit-data (gethash habit habit-stats)))
-  ;;       (push (cdr habit-data) streaks-data))
-  ;;   (when (= (length streaks-data) (length habits))
-  ;;     (let* ((combined-streak 0)
-  ;;           (day-index 0)
-  ;;     ;; TODO don't hardcode habit
-  ;; 	    (habit-data (gethash habit habit-stats))
-  ;;           (continue t)
-  ;; 	    (my-habit-data (my/org-habit-parse-todo 3 (nth 1 habit-data))))
-  ;;       ;; TODO gotta do something with combined streak here
-  ;; 	;; TODO don't hardcode max gap
-
-  ;; 	;; STATUS IS HERE: Okay I think the control flow is getting kind of right... but now need to test with
-  ;; 	;; tasks that do have a streak
-  ;; 	;; also need to not hardcode things
-  ;; 	(my/calculate-streak 3 (nth 4 my-habit-data))))))
-    ;; )
-
-;; this isn't inclusive of the date that did match... err I think?
-;; in any case this should be 3, but it's 2:
-;; (my/calculate-streak 35 '(739466 739459 739434 739273))
-
 (defun my/calculate-streak (max-finish-gap habit-finish-dates)
   (let* ((finished-dates (sort habit-finish-dates :reverse t)) ;; we depend on largest/latest date first
 	(current-day (time-to-days (current-time)))
 	(streak 0)
 	(should-exit nil)
 	(last-date nil))
-    ;; TODO hey you.... yeah YOU... change iteration to be over one date at a time but still in a while loop. First comparison will be eto current-day, then the next will always be last-date, increments only happen by 1... edge cases should disappear
-
     (while (and (not should-exit) (> (length finished-dates) 0))
       (if (not last-date)
 	  (setq last-date current-day))
