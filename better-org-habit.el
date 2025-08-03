@@ -639,7 +639,7 @@ Each category must be a plist with fields :name (string, category name),
       (let ((habit-data (gethash habit habit-stats)))
 	(if habit-data
 	    (let* ((combined-streak 0)
-		   (max-days-to-consider 30) ;; parse this from quest max
+		   (max-days-to-consider 30) ;; TODO parse this from quest max
 		   (pom (nth 1 habit-data))
 		   (my-habit-data (my/org-habit-parse-todo max-days-to-consider pom))
 		   (habit-finishes (nth 4 my-habit-data))
@@ -674,94 +674,26 @@ Each category must be a plist with fields :name (string, category name),
 ;; in any case this should be 3, but it's 2:
 ;; (my/calculate-streak 35 '(739466 739459 739434 739273))
 
-(defun my/calculate-streak (max-habit-gap habit-finish-dates)
+(defun my/calculate-streak (max-finish-gap habit-finish-dates)
   (let* ((finished-dates (sort habit-finish-dates :reverse t)) ;; we depend on largest/latest date first
 	(current-day (time-to-days (current-time)))
-	(maxgap max-habit-gap)
-	(should-exit nil)
 	(streak 0)
-	(most-recent-finish-date (car finished-dates))
+	(should-exit nil)
 	(last-date nil))
-
-
-
-
-
-
     ;; TODO hey you.... yeah YOU... change iteration to be over one date at a time but still in a while loop. First comparison will be eto current-day, then the next will always be last-date, increments only happen by 1... edge cases should disappear
 
+    (while (and (not should-exit) (> (length finished-dates) 0))
+      (if (not last-date)
+	  (setq last-date current-day))
 
+      (let ((finish-date (pop finished-dates)))
+	(if (not (> (- last-date finish-date) max-finish-gap))
+	    (progn
+	      (setq streak (1+ streak))
+	      (setq last-date finish-date))
+	  (setq should-exit t))))
+    streak))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    (if (not (> (- current-day most-recent-finish-date) maxgap))
-	(progn
-	  (setq streak (1+ streak))
-	  (while (and (not should-exit) (/= 0 (length finished-dates)))
-	    (let ((date1 (pop finished-dates))
-		  (date2 (pop finished-dates)))
-
-	      (if (and date1 (not date2))
-		  ;; if date1 is within maxgap of current-day, add to streak
-		  (if (not (> (- current-day date1) maxgap))
-		      (setq streak (1+ streak))))
-
-	      ;; (if (and (not date1)  date2)
-	      ;; 	  "TODO err not sure about this one")
-
-	      ;; (if (and (not date1) (not date2))
-	      ;; 	  "TODO err not sure about this one")
-		       
-	      (if (and date1 date2)		  
-		  (if (> (- date1 date2) maxgap)
-		      (setq should-exit t)
-		    (progn
-		      (setq streak (+ 1 streak))
-		      (setq last-date date2))))
-	      
-		)) streak)
-      0)))
-;; (defun hq-calculate-combined-streak (habits habit-stats)
-;;   "Calculate the number of consecutive days all habits were completed."
-;;   (let ((streaks-data nil))
-;;     (dolist (habit habits)
-      
-      ;; (my/calculate-streak max-habit-gap habit-finish-dates))
-
-      ;; (when-let ((habit-data (gethash habit habit-stats)))
-      ;;   (push (cdar habit-data) streaks-data)))
-    ;; (when (= (length streaks-data) (length habits))
-    ;;   (let ((combined-streak 0)
-    ;;         (day-index 0)
-    ;;         (continue t))
-    ;;     (while (and continue
-    ;;                 (< day-index (length streaks-data)))
-    ;;       (let ((all-done t))
-    ;;         (dolist (habit-state streaks-data)
-    ;;           (when (and (< day-index (length habit-state))
-    ;;                      (not (char-equal (aref habit-state day-index) ?●)))
-    ;;             (setq all-done nil)))
-    ;;         (if all-done
-    ;;             (setq combined-streak (1+ combined-streak))
-    ;;           (setq continue nil)))
-    ;;       (setq day-index (1+ day-index)))
-    ;;     combined-streak))
-    ;; ))
 
 (defun hq-update-quest-progress ()
   "Update quest progress based on current habit streaks."
