@@ -629,7 +629,7 @@ Each category must be a plist with fields :name (string, category name),
 	    (list scheduled sr-days deadline dr-days closed-dates sr-type)))))
 
 
-(defun hq-calculate-combined-streak (habits habit-stats)
+(defun hq-calculate-combined-streak (habits habit-stats required-days)
   "Calculate the number of consecutive days all habits were completed."
   ;; need to use the habit function to get habit-data with marker
   ;; then pass to my calculate streak as written
@@ -639,7 +639,7 @@ Each category must be a plist with fields :name (string, category name),
       (let ((habit-data (gethash habit habit-stats)))
 	(if habit-data
 	    (let* ((combined-streak 0)
-		   (max-days-to-consider 90) ;; TODO parse this from quest max
+		   (max-days-to-consider required-days) ;; TODO parse this from quest max
 		   (pom (nth 1 habit-data))
 		   (my-habit-data (my/org-habit-parse-todo max-days-to-consider pom))
 		   (habit-finishes (nth 4 my-habit-data))
@@ -743,7 +743,7 @@ Each category must be a plist with fields :name (string, category name),
              (required (plist-get quest :required))
              (current-progress 0))
           (setq current-progress
-                (hq-calculate-combined-streak habits habit-stats))
+                (hq-calculate-combined-streak habits habit-stats (plist-get quest :required)))
         (setf (plist-get quest :progress) current-progress))))
   (hq-save-data))
 
