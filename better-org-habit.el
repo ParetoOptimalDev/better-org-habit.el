@@ -568,28 +568,200 @@ Each category must be a plist with fields :name (string, category name),
 (defvar habit-stats (make-hash-table :test 'equal)
   "Hash table for storing habit statistics.")
 
+(defun my/org-habit-parse-todo (maxdays pom)
+  "Parse TODO for habit data."
+  (save-excursion
+        (with-current-buffer (marker-buffer pom)
+          (goto-char (marker-position pom))
+	  (cl-assert (org-is-habit-p (point)))
+	  (let* ((scheduled (org-get-scheduled-time (point)))
+		 (scheduled-repeat (org-get-repeat (org-entry-get (point) "SCHEDULED")))
+		 (end (org-entry-end-position))
+		 (habit-entry (org-no-properties (nth 4 (org-heading-components))))
+		 closed-dates deadline dr-days sr-days sr-type)
+	    (if scheduled
+		(setq scheduled (time-to-days scheduled))
+              (error "Habit %s has no scheduled date" habit-entry))
+	    (unless scheduled-repeat
+              (error "Habit `%s' has no scheduled repeat period" habit-entry))
+	    (setq sr-days (org-habit-duration-to-days scheduled-repeat)
+		  sr-type (progn (string-match "[\\.+]?\\+" scheduled-repeat)
+				 (match-string-no-properties 0 scheduled-repeat)))
+	    (unless (> sr-days 0)
+              (error "Habit %s scheduled repeat period is less than 1d" habit-entry))
+	    (when (string-match "/\\([0-9]+[dwmy]\\)" scheduled-repeat)
+              (setq dr-days (org-habit-duration-to-days
+			     (match-string-no-properties 1 scheduled-repeat)))
+              (if (<= dr-days sr-days)
+		  (error "Habit %s deadline repeat period is less than or equal to scheduled (%s)"
+			 habit-entry scheduled-repeat))
+              (setq deadline (+ scheduled (- dr-days sr-days))))
+	    (org-back-to-heading t)
+	    (let* ((reversed org-log-states-order-reversed)
+		   (search (if reversed 're-search-forward 're-search-backward))
+		   (limit (if reversed end (point)))
+		   (count 0)
+		   (re (format
+			"^[ \t]*-[ \t]+\\(?:State \"%s\".*%s%s\\)"
+			(regexp-opt org-done-keywords)
+			org-ts-regexp-inactive
+			(let ((value (cdr (assq 'done org-log-note-headings))))
+			  (if (not value) ""
+			    (concat "\\|"
+				    (org-replace-escapes
+				     (regexp-quote value)
+				     `(("%d" . ,org-ts-regexp-inactive)
+                                       ("%D" . ,org-ts-regexp)
+                                       ("%s" . "\"\\S-+\"")
+                                       ("%S" . "\"\\S-+\"")
+                                       ("%t" . ,org-ts-regexp-inactive)
+                                       ("%T" . ,org-ts-regexp)
+                                       ("%u" . ".*?")
+                                       ("%U" . ".*?")))))))))
+              (unless reversed (goto-char end))
+              (while (and (< count maxdays) (funcall search re limit t))
+		(push (time-to-days
+                       (org-time-string-to-time
+			(or (match-string-no-properties 1)
+			    (match-string-no-properties 2))))
+                      closed-dates)
+		(setq count (1+ count))))
+	    (list scheduled sr-days deadline dr-days closed-dates sr-type)))))
+
+
 (defun hq-calculate-combined-streak (habits habit-stats)
   "Calculate the number of consecutive days all habits were completed."
-  (let ((streaks-data nil))
+  ;; need to use the habit function to get habit-data with marker
+  ;; then pass to my calculate streak as written
+
+  (let ((streaks '()))
     (dolist (habit habits)
-      (when-let ((habit-data (gethash habit habit-stats)))
-        (push (cdr habit-data) streaks-data)))
-    (when (= (length streaks-data) (length habits))
-      (let ((combined-streak 0)
-            (day-index 0)
-            (continue t))
-        (while (and continue
-                    (< day-index (length streaks-data)))
-          (let ((all-done t))
-            (dolist (habit-state streaks-data)
-              (when (and (< day-index (length habit-state))
-                         (not (char-equal (aref habit-state day-index) ?●)))
-                (setq all-done nil)))
-            (if all-done
-                (setq combined-streak (1+ combined-streak))
-              (setq continue nil)))
-          (setq day-index (1+ day-index)))
-        combined-streak))))
+      (let ((habit-data (gethash habit habit-stats)))
+	(if habit-data
+	    (let* ((combined-streak 0)
+		   (max-days-to-consider 30) ;; parse this from quest max
+		   (pom (nth 1 habit-data))
+		   (my-habit-data (my/org-habit-parse-todo max-days-to-consider pom))
+		   (habit-finishes (nth 4 my-habit-data))
+		   (repeat-len (nth 1 my-habit-data))
+		   (max-repeat-len (or (nth 3 my-habit-data) repeat-len)))
+	      (push (my/calculate-streak max-repeat-len habit-finishes) streaks)
+	  0)))) (car (sort streaks))))
+
+
+  ;; (let ((streaks-data nil))
+  ;;   (dolist (habit habits)
+  ;;     ;; TODO don't hardcode habit
+  ;;     (when-let ((habit-data (gethash habit habit-stats)))
+  ;;       (push (cdr habit-data) streaks-data))
+  ;;   (when (= (length streaks-data) (length habits))
+  ;;     (let* ((combined-streak 0)
+  ;;           (day-index 0)
+  ;;     ;; TODO don't hardcode habit
+  ;; 	    (habit-data (gethash habit habit-stats))
+  ;;           (continue t)
+  ;; 	    (my-habit-data (my/org-habit-parse-todo 3 (nth 1 habit-data))))
+  ;;       ;; TODO gotta do something with combined streak here
+  ;; 	;; TODO don't hardcode max gap
+
+  ;; 	;; STATUS IS HERE: Okay I think the control flow is getting kind of right... but now need to test with
+  ;; 	;; tasks that do have a streak
+  ;; 	;; also need to not hardcode things
+  ;; 	(my/calculate-streak 3 (nth 4 my-habit-data))))))
+    ;; )
+
+;; this isn't inclusive of the date that did match... err I think?
+;; in any case this should be 3, but it's 2:
+;; (my/calculate-streak 35 '(739466 739459 739434 739273))
+
+(defun my/calculate-streak (max-habit-gap habit-finish-dates)
+  (let* ((finished-dates (sort habit-finish-dates :reverse t)) ;; we depend on largest/latest date first
+	(current-day (time-to-days (current-time)))
+	(maxgap max-habit-gap)
+	(should-exit nil)
+	(streak 0)
+	(most-recent-finish-date (car finished-dates))
+	(last-date nil))
+
+
+
+
+
+
+    ;; TODO hey you.... yeah YOU... change iteration to be over one date at a time but still in a while loop. First comparison will be eto current-day, then the next will always be last-date, increments only happen by 1... edge cases should disappear
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    (if (not (> (- current-day most-recent-finish-date) maxgap))
+	(progn
+	  (setq streak (1+ streak))
+	  (while (and (not should-exit) (/= 0 (length finished-dates)))
+	    (let ((date1 (pop finished-dates))
+		  (date2 (pop finished-dates)))
+
+	      (if (and date1 (not date2))
+		  ;; if date1 is within maxgap of current-day, add to streak
+		  (if (not (> (- current-day date1) maxgap))
+		      (setq streak (1+ streak))))
+
+	      ;; (if (and (not date1)  date2)
+	      ;; 	  "TODO err not sure about this one")
+
+	      ;; (if (and (not date1) (not date2))
+	      ;; 	  "TODO err not sure about this one")
+		       
+	      (if (and date1 date2)		  
+		  (if (> (- date1 date2) maxgap)
+		      (setq should-exit t)
+		    (progn
+		      (setq streak (+ 1 streak))
+		      (setq last-date date2))))
+	      
+		)) streak)
+      0)))
+;; (defun hq-calculate-combined-streak (habits habit-stats)
+;;   "Calculate the number of consecutive days all habits were completed."
+;;   (let ((streaks-data nil))
+;;     (dolist (habit habits)
+      
+      ;; (my/calculate-streak max-habit-gap habit-finish-dates))
+
+      ;; (when-let ((habit-data (gethash habit habit-stats)))
+      ;;   (push (cdar habit-data) streaks-data)))
+    ;; (when (= (length streaks-data) (length habits))
+    ;;   (let ((combined-streak 0)
+    ;;         (day-index 0)
+    ;;         (continue t))
+    ;;     (while (and continue
+    ;;                 (< day-index (length streaks-data)))
+    ;;       (let ((all-done t))
+    ;;         (dolist (habit-state streaks-data)
+    ;;           (when (and (< day-index (length habit-state))
+    ;;                      (not (char-equal (aref habit-state day-index) ?●)))
+    ;;             (setq all-done nil)))
+    ;;         (if all-done
+    ;;             (setq combined-streak (1+ combined-streak))
+    ;;           (setq continue nil)))
+    ;;       (setq day-index (1+ day-index)))
+    ;;     combined-streak))
+    ;; ))
 
 (defun hq-update-quest-progress ()
   "Update quest progress based on current habit streaks."
@@ -621,7 +793,14 @@ Each category must be a plist with fields :name (string, category name),
                                         (match-end 1))))
                   (when (and habit-name habit-streak)
                     (puthash habit-name
-                             (cons habit-streak (or habits-state ""))
+                             (list
+			      (cons habit-streak (or habits-state ""))
+			      ;; TODO add marker for org heading here
+			      ;; can get marker from agenda item with
+			      ;; (get-text-property (point) 'org-hd-marker)
+			      ;; oh but we already have it, just need to store it
+			      marker
+			      )
                              habit-stats))))))
           (if (save-excursion (progn (forward-line 1) (eobp)))
 	      (forward-line 1)
@@ -631,12 +810,8 @@ Each category must be a plist with fields :name (string, category name),
       (let* ((habits (plist-get quest :habits))
              (required (plist-get quest :required))
              (current-progress 0))
-        (if (= (length habits) 1)
-            (let ((habit-data (gethash (car habits) habit-stats)))
-              (when habit-data
-                (setq current-progress (car habit-data))))
           (setq current-progress
-                (hq-calculate-combined-streak habits habit-stats)))
+                (hq-calculate-combined-streak habits habit-stats))
         (setf (plist-get quest :progress) current-progress))))
   (hq-save-data))
 
