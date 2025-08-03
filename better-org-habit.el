@@ -639,7 +639,7 @@ Each category must be a plist with fields :name (string, category name),
       (let ((habit-data (gethash habit habit-stats)))
 	(if habit-data
 	    (let* ((combined-streak 0)
-		   (max-days-to-consider 30) ;; TODO parse this from quest max
+		   (max-days-to-consider 90) ;; TODO parse this from quest max
 		   (pom (nth 1 habit-data))
 		   (my-habit-data (my/org-habit-parse-todo max-days-to-consider pom))
 		   (habit-finishes (nth 4 my-habit-data))
